@@ -28,19 +28,19 @@ jobs:
             ${{ runner.os }}-nuget-
 
       - name: Restore
-        working-directory: /PercentageCalculator.csproj
+        working-directory: PercentageCalculator
         run: dotnet restore
 
       - name: Build
-        working-directory: /PercentageCalculator.csproj
+        working-directory: PercentageCalculator
         run: dotnet build --no-restore --configuration Release
 
       - name: Publish (optional artifact)
-        working-directory: /PercentageCalculator.csproj
+        working-directory: PercentageCalculator
         run: dotnet publish --no-build --configuration Release -o ./artifacts
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: published-app
-          path: ./artifacts
+          path: PercentageCalculator/artifacts
