@@ -3,7 +3,7 @@ name: Build Windows single-exe and publish release
 on:
   push:
     tags:
-      - 'v*'        # trigger on version tags like v1.2.0
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -33,12 +33,11 @@ jobs:
             dir=$(dirname "$proj")
             echo "PROJECT_DIR=$dir" >> $GITHUB_ENV
             echo "PROJECT_FILE=$proj" >> $GITHUB_ENV
-            echo "Found project: $proj (dir=$dir)"
           fi
 
-      - name: Restore
+      - name: Restore (include runtime)
         working-directory: ${{ env.PROJECT_DIR }}
-        run: dotnet restore
+        run: dotnet restore --runtime win-x64
 
       - name: Build
         working-directory: ${{ env.PROJECT_DIR }}
@@ -58,8 +57,6 @@ jobs:
             echo "No exe found in ${PROJECT_DIR}/artifacts"
             exit 1
           fi
-          echo "Found exe: $exe"
-          # upload-release-asset expects a relative path or absolute path; expose as env
           echo "ASSET_PATH=$exe" >> $GITHUB_ENV
         env:
           PROJECT_DIR: ${{ env.PROJECT_DIR }}
