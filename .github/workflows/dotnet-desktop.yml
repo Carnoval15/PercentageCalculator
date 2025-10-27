@@ -1,15 +1,13 @@
-name: .NET 8 build
+name: Build and publish release
 
 on:
   push:
     branches: ["main", "master"]
-  pull_request:
-    branches: ["main", "master"]
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -17,30 +15,59 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: "8.0.x"
 
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.sln', '**/*.csproj') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+      - name: Locate project directory
+        id: find_proj
+        run: |
+          proj=$(git ls-files '*.csproj' | head -n1 || true)
+          if [ -z "$proj" ]; then
+            echo "PROJECT_DIR=." >> $GITHUB_ENV
+            echo "No .csproj found by git ls-files; using repo root."
+          else
+            dir=$(dirname "$proj")
+            echo "PROJECT_DIR=$dir" >> $GITHUB_ENV
+            echo "Found project: $proj (dir=$dir)"
+          fi
 
       - name: Restore
-        working-directory: PercentageCalculator
+        working-directory: ${{ env.PROJECT_DIR }}
         run: dotnet restore
 
       - name: Build
-        working-directory: PercentageCalculator
+        working-directory: ${{ env.PROJECT_DIR }}
         run: dotnet build --no-restore --configuration Release
 
-      - name: Publish (optional artifact)
-        working-directory: PercentageCalculator
+      - name: Publish
+        working-directory: ${{ env.PROJECT_DIR }}
         run: dotnet publish --no-build --configuration Release -o ./artifacts
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Package published artifacts
+        run: |
+          echo "Packaging artifacts from $PROJECT_DIR/artifacts"
+          # create a single zip at repo root
+          (cd "${PROJECT_DIR}" && zip -r "${GITHUB_WORKSPACE}/publish.zip" artifacts) || (echo "zip failed" && exit 1)
+        env:
+          PROJECT_DIR: ${{ env.PROJECT_DIR }}
+
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
         with:
-          name: published-app
-          path: PercentageCalculator/artifacts
+          tag_name: release-${{ github.run_number }}
+          release_name: Release ${{ github.run_number }}
+          body: Automated build published by GitHub Actions
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release asset (publish.zip)
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./publish.zip
+          asset_name: publish.zip
+          asset_content_type: application/zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
