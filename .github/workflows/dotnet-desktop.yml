@@ -5,9 +5,14 @@ on:
     branches: ["main", "master"]
   workflow_dispatch:
 
+permissions:
+  contents: write   # required to create releases and upload assets
+  packages: write
+
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -16,6 +21,17 @@ jobs:
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: "8.0.x"
+
+      - name: Locate project directory
+        id: find_proj
+        run: |
+          proj=$(git ls-files '*.csproj' | head -n1 || true)
+          if [ -z "$proj" ]; then
+            echo "PROJECT_DIR=." >> $GITHUB_ENV
+          else
+            dir=$(dirname "$proj")
+            echo "PROJECT_DIR=$dir" >> $GITHUB_ENV
+          fi
 
       - name: Restore
         working-directory: PercentageCalculator
@@ -31,9 +47,7 @@ jobs:
 
       - name: Package published artifacts
         run: |
-          echo "Packaging artifacts from $PROJECT_DIR/artifacts"
-          # create a single zip at repo root
-          (cd "${PROJECT_DIR}" && zip -r "${GITHUB_WORKSPACE}/publish.zip" artifacts) || (echo "zip failed" && exit 1)
+          (cd "${PROJECT_DIR}" && zip -r "${GITHUB_WORKSPACE}/publish.zip" artifacts)
         env:
           PROJECT_DIR: PercentageCalculator
 
@@ -46,8 +60,7 @@ jobs:
           body: Automated build published by GitHub Actions
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload release asset (publish.zip)
         uses: actions/upload-release-asset@v1
