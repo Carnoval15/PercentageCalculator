@@ -1,13 +1,13 @@
-name: Build and publish release
+name: Build Windows single-exe and publish release
 
 on:
   push:
-    branches: ["main", "master"]
+    tags:
+      - 'v*'        # trigger on version tags like v1.2.0
   workflow_dispatch:
 
 permissions:
-  contents: write   # required to create releases and upload assets
-  packages: write
+  contents: write
 
 jobs:
   build-and-release:
@@ -20,7 +20,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: '8.0.x'
 
       - name: Locate project directory
         id: find_proj
@@ -28,47 +28,60 @@ jobs:
           proj=$(git ls-files '*.csproj' | head -n1 || true)
           if [ -z "$proj" ]; then
             echo "PROJECT_DIR=." >> $GITHUB_ENV
+            echo "PROJECT_FILE=" >> $GITHUB_ENV
           else
             dir=$(dirname "$proj")
             echo "PROJECT_DIR=$dir" >> $GITHUB_ENV
+            echo "PROJECT_FILE=$proj" >> $GITHUB_ENV
+            echo "Found project: $proj (dir=$dir)"
           fi
 
       - name: Restore
-        working-directory: PercentageCalculator
+        working-directory: ${{ env.PROJECT_DIR }}
         run: dotnet restore
 
       - name: Build
-        working-directory: PercentageCalculator
+        working-directory: ${{ env.PROJECT_DIR }}
         run: dotnet build --no-restore --configuration Release
 
-      - name: Publish
-        working-directory: PercentageCalculator
-        run: dotnet publish --no-build --configuration Release -o ./artifacts
-
-      - name: Package published artifacts
+      - name: Publish single-file Windows exe (win-x64)
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          (cd "${PROJECT_DIR}" && zip -r "${GITHUB_WORKSPACE}/publish.zip" artifacts)
-        env:
-          PROJECT_DIR: PercentageCalculator
+          dotnet publish --no-build --configuration Release -r win-x64 -o ./artifacts \
+            -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeAllContentForSelfExtract=true
 
-      - name: Create release
+      - name: Find published exe
+        id: find_exe
+        run: |
+          exe=$(find "${PROJECT_DIR}/artifacts" -type f -name '*.exe' | head -n1 || true)
+          if [ -z "$exe" ]; then
+            echo "No exe found in ${PROJECT_DIR}/artifacts"
+            exit 1
+          fi
+          echo "Found exe: $exe"
+          # upload-release-asset expects a relative path or absolute path; expose as env
+          echo "ASSET_PATH=$exe" >> $GITHUB_ENV
+        env:
+          PROJECT_DIR: ${{ env.PROJECT_DIR }}
+
+      - name: Create GitHub Release (use tag name)
         id: create_release
         uses: actions/create-release@v1
         with:
-          tag_name: release-${{ github.run_number }}
-          release_name: Release ${{ github.run_number }}
-          body: Automated build published by GitHub Actions
+          tag_name: ${{ github.ref_name }}
+          release_name: ${{ github.ref_name }}
+          body: Automated Windows single-exe build for ${{ github.ref_name }}
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload release asset (publish.zip)
+      - name: Upload exe as release asset
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./publish.zip
-          asset_name: publish.zip
-          asset_content_type: application/zip
+          asset_path: ${{ env.ASSET_PATH }}
+          asset_name: ${{ github.ref_name }}.exe
+          asset_content_type: application/octet-stream
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
