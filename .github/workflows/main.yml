@@ -3,7 +3,7 @@ name: Build Windows single-exe and publish release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*'        # trigger on version tags like v1.2.0
   workflow_dispatch:
 
 permissions:
@@ -25,19 +25,20 @@ jobs:
       - name: Locate project directory
         id: find_proj
         run: |
-          proj=$(git ls-files '*.csproj' | head -n1 || true)
-          if [ -z "$proj" ]; then
-            echo "PROJECT_DIR=." >> $GITHUB_ENV
-            echo "PROJECT_FILE=" >> $GITHUB_ENV
-          else
-            dir=$(dirname "$proj")
-            echo "PROJECT_DIR=$dir" >> $GITHUB_ENV
-            echo "PROJECT_FILE=$proj" >> $GITHUB_ENV
-          fi
+          $proj = git ls-files '*.csproj' | Select-Object -First 1
+          if (-not $proj) {
+            Write-Output "PROJECT_DIR=." | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Output "PROJECT_FILE=" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+            $dir = Split-Path $proj -Parent
+            Write-Output "PROJECT_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Output "PROJECT_FILE=$proj" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Output "Found project: $proj (dir=$dir)"
+          }
 
-      - name: Restore (include runtime)
+      - name: Restore
         working-directory: ${{ env.PROJECT_DIR }}
-        run: dotnet restore --runtime win-x64
+        run: dotnet restore
 
       - name: Build
         working-directory: ${{ env.PROJECT_DIR }}
@@ -46,20 +47,16 @@ jobs:
       - name: Publish single-file Windows exe (win-x64)
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          dotnet publish --no-build --configuration Release -r win-x64 -o ./artifacts \
+          dotnet publish --configuration Release -r win-x64 -o ./artifacts `
             -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeAllContentForSelfExtract=true
 
       - name: Find published exe
         id: find_exe
         run: |
-          exe=$(find "${PROJECT_DIR}/artifacts" -type f -name '*.exe' | head -n1 || true)
-          if [ -z "$exe" ]; then
-            echo "No exe found in ${PROJECT_DIR}/artifacts"
-            exit 1
-          fi
-          echo "ASSET_PATH=$exe" >> $GITHUB_ENV
-        env:
-          PROJECT_DIR: ${{ env.PROJECT_DIR }}
+          $exe = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\${{ env.PROJECT_DIR }}\artifacts" -Recurse -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { Write-Error "No exe found in artifacts"; exit 1 }
+          Write-Output "Found exe: $($exe.FullName)"
+          Write-Output "ASSET_PATH=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Create GitHub Release (use tag name)
         id: create_release
