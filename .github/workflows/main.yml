@@ -3,11 +3,10 @@ name: Build Windows single-exe and publish release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*'               # trigger when you push version tags (e.g. v1.2.0)
   release:
-    types: [published]
-  workflow_dispatch:
-
+    types: [published]     # also trigger when you publish a release in the UI
+  workflow_dispatch:        # allow manual runs
 
 permissions:
   contents: write
