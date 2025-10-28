@@ -52,6 +52,15 @@ jobs:
           dotnet publish --configuration Release -r win-x64 -o ./artifacts `
             -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeAllContentForSelfExtract=true
 
+      - name: Rename published exe
+        run: |
+          $exe = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\${{ env.PROJECT_DIR }}\artifacts" -Recurse -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { Write-Error "No exe found in artifacts"; exit 1 }
+          $newName = "PercentageCalculator-${{ github.ref_name }}.exe"
+          Rename-Item $exe.FullName $newName
+          Write-Output "Renamed exe to: $newName"
+
+
       - name: Find published exe
         id: find_exe
         run: |
