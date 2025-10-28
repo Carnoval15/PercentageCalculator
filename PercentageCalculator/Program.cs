@@ -1,4 +1,5 @@
 ﻿// See https://aka.ms/new-console-template for more information
+//git tag -a v1.2.0 -m "Release v1.2.0" then git push origin v1.2.0
 
 static int? ReadNullableInt(string prompt)
 {
@@ -47,71 +48,75 @@ Console.WriteLine("Wellcome to the percentage calculator!");
 
 while (true)
 {
-    RightAnswers = ReadNullableInt("Please enter the number of right answers: ");
-    FalseAnswers = ReadNullableInt("Please enter the number of false answers: ");
-    NotAnswered = ReadNullableInt("Please enter the number of not answered questions: ");
-    TotalQuestions = ReadNullableInt("Please enter the total number of questions: ");
 
-    if (TwoOrMoreZerosOrNulls(RightAnswers, FalseAnswers, NotAnswered, TotalQuestions))
+    while (true)
     {
-        Console.WriteLine("Error: two or more values are zero or blank. Provide at least three values (only one value may be unknown/blank). Let's try again.\n");
-        continue;
+        RightAnswers = ReadNullableInt("Please enter the number of right answers: ");
+        FalseAnswers = ReadNullableInt("Please enter the number of false answers: ");
+        NotAnswered = ReadNullableInt("Please enter the number of not answered questions: ");
+        TotalQuestions = ReadNullableInt("Please enter the total number of questions: ");
+
+        if (TwoOrMoreZerosOrNulls(RightAnswers, FalseAnswers, NotAnswered, TotalQuestions))
+        {
+            Console.WriteLine("Error: two or more values are zero or blank. Provide at least three values (only one value may be unknown/blank). Let's try again.\n");
+            continue;
+        }
+
+        // If exactly one is unknown (null or 0), deduce it by treating null as 0 in arithmetic
+        if (IsUnknown(RightAnswers))
+        {
+            RightAnswers = (TotalQuestions ?? 0) - (FalseAnswers ?? 0) - (NotAnswered ?? 0);
+        }
+        else if (IsUnknown(FalseAnswers))
+        {
+            FalseAnswers = (TotalQuestions ?? 0) - (RightAnswers ?? 0) - (NotAnswered ?? 0);
+        }
+        else if (IsUnknown(NotAnswered))
+        {
+            NotAnswered = (TotalQuestions ?? 0) - (RightAnswers ?? 0) - (FalseAnswers ?? 0);
+        }
+        else if (IsUnknown(TotalQuestions))
+        {
+            TotalQuestions = (RightAnswers ?? 0) + (FalseAnswers ?? 0) + (NotAnswered ?? 0);
+        }
+
+        // Validate deduced/provided values
+        if ((RightAnswers ?? 0) < 0 || (FalseAnswers ?? 0) < 0 || (NotAnswered ?? 0) < 0 || (TotalQuestions ?? 0) < 0)
+        {
+            Console.WriteLine("Error: one or more deduced values are negative — inputs are inconsistent. Please re-enter.\n");
+            continue;
+        }
+
+        if ((RightAnswers ?? 0) + (FalseAnswers ?? 0) + (NotAnswered ?? 0) != (TotalQuestions ?? 0))
+        {
+            Console.WriteLine("Error: values are inconsistent (Right + False + Not = Total). Please check and re-enter.\n");
+            continue;
+        }
+
+        // All good
+        break;
     }
 
-    // If exactly one is unknown (null or 0), deduce it by treating null as 0 in arithmetic
-    if (IsUnknown(RightAnswers))
+    int r = RightAnswers ?? 0;
+    int f = FalseAnswers ?? 0;
+    int n = NotAnswered ?? 0;
+    int t = TotalQuestions ?? 0;
+
+    Console.WriteLine($"Right: {r}, False: {f}, Not: {n}, Total: {t}");
+
+    if (t == 0)
     {
-        RightAnswers = (TotalQuestions ?? 0) - (FalseAnswers ?? 0) - (NotAnswered ?? 0);
+        Console.WriteLine("Total questions is 0 — cannot compute percentage.");
     }
-    else if (IsUnknown(FalseAnswers))
+    else
     {
-        FalseAnswers = (TotalQuestions ?? 0) - (RightAnswers ?? 0) - (NotAnswered ?? 0);
+        int score = (r * 3) - f;
+        int maxScore = t * 3;
+
+        // Cast to float to avoid integer division
+        Percentage = (float)score / maxScore * 100f;
+
+        //Console.WriteLine($"Score: {score} / {maxScore}");
+        Console.WriteLine($"Percentage: {Percentage:F2}%");
     }
-    else if (IsUnknown(NotAnswered))
-    {
-        NotAnswered = (TotalQuestions ?? 0) - (RightAnswers ?? 0) - (FalseAnswers ?? 0);
-    }
-    else if (IsUnknown(TotalQuestions))
-    {
-        TotalQuestions = (RightAnswers ?? 0) + (FalseAnswers ?? 0) + (NotAnswered ?? 0);
-    }
-
-    // Validate deduced/provided values
-    if ((RightAnswers ?? 0) < 0 || (FalseAnswers ?? 0) < 0 || (NotAnswered ?? 0) < 0 || (TotalQuestions ?? 0) < 0)
-    {
-        Console.WriteLine("Error: one or more deduced values are negative — inputs are inconsistent. Please re-enter.\n");
-        continue;
-    }
-
-    if ((RightAnswers ?? 0) + (FalseAnswers ?? 0) + (NotAnswered ?? 0) != (TotalQuestions ?? 0))
-    {
-        Console.WriteLine("Error: values are inconsistent (Right + False + Not = Total). Please check and re-enter.\n");
-        continue;
-    }
-
-    // All good
-    break;
-}
-
-int r = RightAnswers ?? 0;
-int f = FalseAnswers ?? 0;
-int n = NotAnswered ?? 0;
-int t = TotalQuestions ?? 0;
-
-Console.WriteLine($"Right: {r}, False: {f}, Not: {n}, Total: {t}");
-
-if (t == 0)
-{
-    Console.WriteLine("Total questions is 0 — cannot compute percentage.");
-}
-else
-{
-    int score = (r * 3) - f;
-    int maxScore = t * 3;
-
-    // Cast to float to avoid integer division
-    Percentage = (float)score / maxScore * 100f;
-
-    //Console.WriteLine($"Score: {score} / {maxScore}");
-    Console.WriteLine($"Percentage: {Percentage:F2}%");
 }
