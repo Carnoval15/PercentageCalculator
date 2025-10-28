@@ -3,8 +3,11 @@ name: Build Windows single-exe and publish release
 on:
   push:
     tags:
-      - 'v*'        # trigger on version tags like v1.2.0
+      - 'v*'
+  release:
+    types: [published]
   workflow_dispatch:
+
 
 permissions:
   contents: write
