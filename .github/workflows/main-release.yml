@@ -1,0 +1,83 @@
+name: Build Windows single-exe and publish release
+
+on:
+  push:
+    tags:
+      - 'v*'               # trigger when you push version tags (e.g. v1.2.0)
+  release:
+    types: [published]     # also trigger when you publish a release in the UI
+  workflow_dispatch:        # allow manual runs
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Locate project directory
+        id: find_proj
+        run: |
+          $proj = git ls-files '*.csproj' | Select-Object -First 1
+          if (-not $proj) {
+            Write-Output "PROJECT_DIR=." | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Output "PROJECT_FILE=" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+            $dir = Split-Path $proj -Parent
+            Write-Output "PROJECT_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Output "PROJECT_FILE=$proj" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Output "Found project: $proj (dir=$dir)"
+          }
+
+      - name: Restore
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: dotnet restore
+
+      - name: Build
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Publish single-file Windows exe (win-x64)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          dotnet publish --configuration Release -r win-x64 -o ./artifacts `
+            -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeAllContentForSelfExtract=true
+
+      - name: Find published exe
+        id: find_exe
+        run: |
+          $exe = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\${{ env.PROJECT_DIR }}\artifacts" -Recurse -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { Write-Error "No exe found in artifacts"; exit 1 }
+          Write-Output "Found exe: $($exe.FullName)"
+          Write-Output "ASSET_PATH=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Create GitHub Release (use tag name)
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: ${{ github.ref_name }}
+          body: Automated Windows single-exe build for ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload exe as release asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ env.ASSET_PATH }}
+          asset_name: ${{ github.ref_name }}.exe
+          asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
